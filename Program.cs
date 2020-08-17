@@ -153,8 +153,13 @@ namespace ESConsumer
     {
         static string cookie = string.Empty;
         static string content = string.Empty;
+        static string targetRegion = string.Empty;
         static void Main(string[] args)
         {
+            if (args.Length > 0)
+            {
+                targetRegion = args[0];
+            }
             //XMLHttpRequest 
             //HttpWebRequest req = (HttpWebRequest)WebRequest.Create("https://localhost:10086/native/v1/regions/127.0.0.1/Validate");
             HttpWebRequest req = (HttpWebRequest)WebRequest.Create("http://localhost:10086/validate");
@@ -179,26 +184,52 @@ namespace ESConsumer
             {
                 int a = response.Cookies.Count;
                 cookie = response.Headers.Get("Set-Cookie");
-                GetResponse(response, true);
+                GetResponseBody(response, true);
 
                 req = (HttpWebRequest)WebRequest.Create("http://localhost:10086/server/v1/info");
                 response = MakeGETRequest(req);
-                GetResponse(response, true);
+                GetResponseBody(response, true);
 
                 req = (HttpWebRequest)WebRequest.Create("http://localhost:10086/server/v1/config/mfds/1");
                 response = MakeGETRequest(req);
-                GetResponse(response, true);
+                GetResponseBody(response, true);
 
                 req = (HttpWebRequest)WebRequest.Create("http://localhost:10086/native/v1/regions/127.0.0.1/86");
                 response = MakeGETRequest(req);
-                GetResponse(response);
+                GetResponseBody(response);
                 string jsonValue = content;
                 ESCWARegions regions = JsonConvert.DeserializeObject<ESCWARegions>(jsonValue);
 
-                for (int i = 0; i < regions.RegionList.Length; i++)
+                //Console.Write("\n|");
+                //for (int i = 0; i < regions.RegionList.Length; i++)
+                //{
+                //    Console.Write(".");
+                //    req = (HttpWebRequest)WebRequest.Create("http://localhost:10086/native/v1/regions/127.0.0.1/86/" + regions.RegionList[i].CN);
+                //    GetResponseBody(MakeGETRequest(req));
+                //    RegionProperties regDetails = JsonConvert.DeserializeObject<RegionProperties>(content);
+                //}
+                //Console.WriteLine("|\n");
+
+
+                if (targetRegion.Length > 0)
                 {
-                    Console.WriteLine(regions.RegionList[i].CN);
+                    req = (HttpWebRequest)WebRequest.Create("http://localhost:10086/native/v1/regions/127.0.0.1/86/" + targetRegion);
+                    GetResponseBody(MakeGETRequest(req));
+                    if (content.Length > 0)
+                    {
+                        RegionProperties regOfInterestDetails = JsonConvert.DeserializeObject<RegionProperties>(content);
+                        Console.WriteLine("Region " + targetRegion + " is " + regOfInterestDetails.mfServerStatus);
+                    }
+                    else
+                    {
+                        Console.WriteLine("Region not known");
+                    }
                 }
+                else
+                {
+                    Console.WriteLine("No region specified");
+                }
+
 
                 req = (HttpWebRequest)WebRequest.Create("http://localhost:10086/logoff");
                 response = MakeGETRequest(req);
@@ -210,13 +241,17 @@ namespace ESConsumer
             }
         }
 
-        static void GetResponse(HttpWebResponse response, bool doDisplay = false)
+        static void GetResponseBody(HttpWebResponse response, bool doDisplay = false)
         {
-            Stream stream = response.GetResponseStream();
-            StreamReader sr = new StreamReader(stream);
-            content = sr.ReadToEnd();
-            if (doDisplay)
-                Console.WriteLine(content);
+            content = string.Empty;
+            if (response.StatusCode == HttpStatusCode.OK)
+            {
+                Stream stream = response.GetResponseStream();
+                StreamReader sr = new StreamReader(stream);
+                content = sr.ReadToEnd();
+                if (doDisplay)
+                    Console.WriteLine(content);
+            }
         }
         static HttpWebResponse MakeGETRequest(HttpWebRequest req)
         {
@@ -228,7 +263,18 @@ namespace ESConsumer
             req.ContentType = "application/json";
             req.Accept = "application/json";
 
-            return (HttpWebResponse)req.GetResponse();
+            HttpWebResponse resp;
+            try
+            {
+                resp = (HttpWebResponse)req.GetResponse();
+            }
+            catch (System.Net.WebException e)
+            {
+                Console.WriteLine(e.Message);
+                resp = (HttpWebResponse)e.Response;
+            }
+
+            return resp;
         }
     }
 }
